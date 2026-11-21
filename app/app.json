@@ -1,0 +1,174 @@
+{
+  "id": "clucraft_snes",
+  "title": "SNES",
+  "description": "Super Nintendo games on the iDrive (the Snes9x emulator, in its libretro form snes9x2005; for non-commercial use only). Comes with one small free game, Pad Test. Your own .sfc and .smc files come from a phone (Add games shows a code to scan; needs the SNES game loader from this source), from a folder \"snes\" on a USB stick, or are copied to the head unit. Played with an Xbox pad on a cable (needs the SNES game loader); the iDrive controller steers the menus and is enough for a slow game. A short main menu; the list of games, Add games and the settings as tabs on one drawn screen; the game pixel for pixel on the whole screen; BACK returns to the menu and saves. Sound on the car's speakers, with the SNES game loader (it takes the place of the radio while a game runs; a setting switches it off)",
+  "version": "0.1.0",
+  "vendor": "clucraft",
+  "loggingId": "OACA",
+  "maxDiskUsage": 134217728,
+  "iconGlyph": "SNES",
+  "signals": {
+    "de.bmw.infotainment.vehicle.Vehicle2": {
+      "statusCarSpeed2": "rs"
+    },
+    "de.bmw.infotainment.controlelements.FrontCCU": {
+      "statusRotaryEncoderState": "rs"
+    },
+    "org.genivi.am.commandinterface.CommandControl": {
+      "_instances": "1",
+      "_methods": [
+        "connect",
+        "disconnect",
+        "getListMainConnections"
+      ],
+      "_optional": "the sound on the car's speakers"
+    },
+    "org.genivi.am.routinginterface.RoutingControlObserver": {
+      "_instances": "1",
+      "_methods": [
+        "hookSourceAvailablityStatusChange"
+      ],
+      "_optional": "the sound on the car's speakers"
+    }
+  },
+  "config": {
+    "romDirs": [],
+    "usbRoots": [
+      "/media",
+      "/run/media"
+    ],
+    "loaderSocket": "/run/clucraft-snes-loader.sock"
+  },
+  "screens": [
+    {
+      "name": "MAIN",
+      "kind": "menu",
+      "title": "SNES",
+      "items": [
+        ["button", "BTN_PLAY", "Continue"],
+        ["button", "BTN_GAMES", "Games"],
+        ["button", "BTN_ADD", "Add games from a phone"],
+        ["button", "BTN_SET", "Settings"],
+        ["text", "MENU_INFO", ""]
+      ]
+    },
+    {
+      "name": "GAME",
+      "kind": "canvas",
+      "title": "SNES",
+      "chrome": false,
+      "buttons": [
+        ["BTN_SELECT", "Select"],
+        ["BTN_START", "Start"],
+        ["BTN_B", "B"],
+        ["BTN_A", "A"]
+      ]
+    }
+  ],
+  "settings": [
+    {
+      "key": "parkedOnly",
+      "label": "Parked only (pauses while driving)",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "key": "resume",
+      "label": "Carry on where the game was left",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "key": "pad",
+      "label": "USB gamepad (Xbox pad on a cable; needs the SNES game loader)",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "key": "padButtons",
+      "label": "Gamepad buttons",
+      "type": "choice",
+      "default": "place",
+      "options": [
+        ["place", "By where they are (the Xbox pad's A is B)"],
+        ["letter", "By their letters (the Xbox pad's A is A)"]
+      ]
+    },
+    {
+      "key": "press",
+      "label": "Controller press",
+      "type": "choice",
+      "default": "b",
+      "options": [["b", "B"], ["a", "A"], ["y", "Y"], ["x", "X"], ["start", "Start"]]
+    },
+    {
+      "key": "turnR",
+      "label": "Controller turn right",
+      "type": "choice",
+      "default": "a",
+      "options": [["a", "A"], ["b", "B"], ["y", "Y"], ["x", "X"], ["l", "L"], ["r", "R"], ["start", "Start"], ["select", "Select"], ["none", "Nothing"]]
+    },
+    {
+      "key": "turnL",
+      "label": "Controller turn left",
+      "type": "choice",
+      "default": "start",
+      "options": [["start", "Start"], ["select", "Select"], ["b", "B"], ["a", "A"], ["y", "Y"], ["x", "X"], ["l", "L"], ["r", "R"], ["none", "Nothing"]]
+    },
+    {
+      "key": "touch",
+      "label": "Touch buttons beside the picture",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "key": "sound",
+      "label": "Sound on the car's speakers (needs the SNES game loader; in place of the radio)",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "key": "soundChip",
+      "label": "Sound chip (from the next game on)",
+      "type": "choice",
+      "default": "fast",
+      "options": [
+        ["fast", "The quick one (Snes9x 1.43's)"],
+        ["plus", "The truer one (blargg's; slower)"]
+      ]
+    },
+    {
+      "key": "draw",
+      "label": "Picture",
+      "type": "choice",
+      "default": "auto",
+      "options": [
+        ["auto", "Every frame; every second one when too slow"],
+        ["every", "Every frame, always"],
+        ["half", "Every second frame, always"]
+      ]
+    },
+    {
+      "key": "hires",
+      "label": "High-resolution pictures (some games' text)",
+      "type": "choice",
+      "default": "full",
+      "options": [
+        ["full", "As they are (sharp text)"],
+        ["shrink", "Shrunk (blurred; less to draw)"]
+      ]
+    },
+    {
+      "key": "joinedWifi",
+      "label": "Add games over the Wi-Fi the car is on (home, phone hotspot)",
+      "type": "bool",
+      "default": true
+    },
+    {
+      "key": "flicker",
+      "label": "Less sprite flicker",
+      "type": "bool",
+      "default": false
+    }
+  ]
+}

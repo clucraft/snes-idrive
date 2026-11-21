@@ -1,0 +1,18 @@
+node_modules/
+# toolchains, the cores the bake-off compares, Node 8, cc65, build outputs, sound to listen to
+.cache/
+# car packages contain BMW's SDK (and your games): never commit or publish them
+dist/
+*.mgu
+# games are yours: none belong in git (app/roms/.gitignore says the same)
+roms/
+*.sfc
+*.smc
+*.SFC
+*.SMC
+# ... but for the one that comes with the app, built from games/ (games/build.js)
+!app/games/Pad_Test.sfc
+# what games/build.js makes on the way
+games/obj/
+# this computer's settings for Claude Code
+.claude/

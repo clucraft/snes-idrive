@@ -1,0 +1,21 @@
+{
+  "name": "snes-idrive",
+  "version": "0.1.0",
+  "description": "Super Nintendo games on the BMW iDrive 7 (MGU) head unit: the Snes9x emulator (snes9x2005) as WebAssembly on the idrive7-apps kit. For non-commercial use only.",
+  "private": true,
+  "license": "SEE LICENSE IN NOTICE",
+  "scripts": {
+    "setup": "node tools/setup.js",
+    "emu": "node tools/emu.js",
+    "test": "node test/run.js",
+    "test:node8": "node tools/node8.js test/run.js",
+    "build:car": "node tools/build-car.js",
+    "build:store": "node tools/build-store.js",
+    "build:games": "node games/build.js",
+    "build:usbpipe": "node tools/build-usbpipe.js",
+    "build:sound": "node tools/build-sound.js",
+    "build:core": "node core/build.js",
+    "licenses": "node tools/licenses.js",
+    "bakeoff:fetch": "node bakeoff/build.js --fetch"
+  }
+}

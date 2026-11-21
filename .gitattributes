@@ -1,0 +1,10 @@
+* text=auto eol=lf
+*.png binary
+*.wasm binary
+*.tgz binary
+*.sfc binary
+*.smc binary
+loader/snes-usbpipe binary
+loader/snes-sound binary
+*.patch text eol=lf
+*.sh text eol=lf

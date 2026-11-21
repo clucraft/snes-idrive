@@ -1,0 +1,45 @@
+SNES for iDrive 7 - licences
+
+THE APP IS FOR NON-COMMERCIAL USE ONLY. It contains the SNES emulator Snes9x, whose licence allows using,
+copying, changing and passing it on for non-commercial purposes only, and asks that its licence and copyright
+notice go with every copy and with every work derived from it. That holds for the app as a whole, in whatever
+form it is passed on: the package the MGU Store installs, a build of your own, a head unit it is installed on.
+It may not be sold, bundled with something that is sold, or used to promote a commercial product.
+
+What is whose:
+
+- snes.wasm and snes-plus.wasm (in the app) are the libretro core snes9x2005
+  (https://github.com/libretro/snes9x2005, commit a79dfe9; Snes9x 1.43 by the Snes9x team, by way of the
+  ports NDSSFC, BAGSFC and CATSFC) compiled to WebAssembly together with a small frontend, mgu_libretro.c.
+  snes-plus.wasm is the same with blargg's sound chip emulation in place of Snes9x 1.43's (the core's
+  USE_BLARGG_APU). The core's own licence file, with every copyright notice, is the second part of the
+  file LICENSE in the app's package, and LICENSE.snes9x2005 at the top of the repository: Snes9x's licence
+  (non-commercial), notices under the GNU General Public License version 2 or later for the parts that come
+  from NDSSFC and from ZSNES, and the MIT licence for libretro's own part.
+  The core's source, unchanged, is the submodule vendor/snes9x2005 of https://github.com/clucraft/snes-idrive;
+  the frontend and the script that builds both files are in core/ there.
+
+- Everything else in the app and in that repository that is not named below was written for this project
+  or for its predecessor, NES for iDrive 7 (https://github.com/clucraft/nes-idrive), by the same author, and
+  is under the MIT licence: the first part of the file LICENSE in the app's package, and LICENSE at the top
+  of the repository.
+
+- caraudio.js is M850i-amn/idrive7-apps' apps/amn_iptv/lib/car_audio.js (MIT), as
+  https://github.com/clucraft/plex-idrive carries it.
+
+- core/libretro.h in the repository is libretro's API header (MIT; its text is in the file).
+
+- The app runs on the idrive7-apps kit (https://github.com/cauliflowermossgrape/idrive7-apps, MIT), whose
+  runtime is packed with it. The kit's GPU renderer and its emulator's draw engine are GPL-3.0-or-later and
+  run as their own programs.
+
+- One small game comes with the app, Pad Test (games.pack). It was written for this project and is under
+  the MIT licence; its source is in games/ of the repository. No other game is included: beyond it the app
+  runs .sfc and .smc files its user supplies.
+
+- The SNES game loader (loader/ in the repository; installed beside the app, not part of it) is under the
+  MIT licence. Its program snes-sound contains github.com/ebitengine/purego (Apache-2.0: LICENSE.purego
+  in its folder).
+
+Super Nintendo Entertainment System, Super NES and Super Famicom are trademarks of Nintendo. Snes9x and this
+app are not affiliated with Nintendo or BMW.
