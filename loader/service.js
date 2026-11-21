@@ -62,7 +62,7 @@ const firewall = require('./nft');
 const pads = require('./pad');
 const sounds = require('./sound');
 
-const VERSION = '0.1.0';
+const VERSION = '0.2.0';
 const PORT = 8494;                  // (the MGU Store's own page is 8470; other apps' pages 8490 to 8492; the NES game loader's 8493)
 const PAGE_MINUTES = 15;
 const REFRESH_MS = 5000;            // the car Wi-Fi's addresses and the firewall rules are looked at this often

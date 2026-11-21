@@ -1,10 +1,10 @@
 # SNES game loader
 
-A small service for the head unit that does three things for the [SNES app](../README.md) which an app cannot do itself: it takes **games from a phone** (*Add games from a phone* in the app shows a QR code, the phone opens the page behind it and picks `.sfc` and `.smc` files), it reads a **USB gamepad**, and it plays a **game's sound**.
+A small service for the head unit that does three things for the [SNES app](../README.md) which an app cannot do itself: it takes **games from a phone** (*Add games from a phone* in the app shows a QR code, the phone opens the page behind it and picks `.sfc` and `.smc` files, or `.zip` files with those in them), it reads a **USB gamepad**, and it plays a **game's sound**.
 
 It is optional. Without it the app starts and shows its games, which then come from a USB stick or over SSH; but an SNES game wants a gamepad, so in practice the app wants the loader.
 
-> **Not on a car yet.** This is the [NES game loader](https://github.com/clucraft/nes-idrive/tree/mgu-store/loader) (its version 0.3.0) under names of its own, with what an SNES changes. That loader has run on one car (2026-11-19 and 20): there the MGU Store installed it, the NES app reached it, an Xbox One S pad on a cable worked as the gamepad, a game sent from a phone was saved and played, and a game's sound was heard on the speakers. None of that has been shown for this one. What is new here and has only run on a PC: the names, the port, what counts as a game, the stick clicks and the Xbox button passed on to the app, and sound that arrives at 32040 samples a second.
+> **Not on a car yet.** This is the [NES game loader](https://github.com/clucraft/nes-idrive/tree/mgu-store/loader) (its version 0.3.0) under names of its own, with what an SNES changes. That loader has run on one car (2026-11-19 and 20): there the MGU Store installed it, the NES app reached it, an Xbox One S pad on a cable worked as the gamepad, a game sent from a phone was saved and played, and a game's sound was heard on the speakers. None of that has been shown for this one. What is new here and has only run on a PC: the names, the port, what counts as a game, zipped games, the stick clicks and the Xbox button passed on to the app, and sound that arrives at 32040 samples a second.
 
 **Beside the NES game loader.** Everything of this loader has its own name, so both can be installed at once and neither touches the other: the socket `/run/clucraft-snes-loader.sock`, the units `clucraft-snes-loader.socket` and `.service`, the folder `/var/opt/clucraft-snes-loader`, the port 8494 (the NES loader's is 8493), the firewall rules' comment `clucraft-snes-loader`, and the two programs `snes-usbpipe` and `snes-sound`. It looks for the app `clucraft_snes` and opens its socket to that app alone.
 
@@ -33,6 +33,7 @@ The page can also take a game out again. It works while the screen with the code
 - **The address is the key.** The page is at `http://<car Wi-Fi address>:8494/<20 random characters>/`, new each time. Without those characters every request is "not found"; after 100 such requests the page closes. It is plain HTTP, so anyone already on that Wi-Fi who sees the code can use it for as long as it is up.
 - **The page is not root.** It runs as the user the SNES app runs as, so it can write where the app can and nowhere else. That user is the number in the name of the app's folder (`oap_<number>`); the folder's owner is whoever installed the app, the MGU Store's user on a car. The page is started inside the app's data folder, because the app's user alone does not get there: the way leads through a folder that opens only to a group the head unit gives its apps' processes, and a process started as another user keeps no such group.
 - **What it takes:** files with an SNES cartridge's header in them (`games.js`, `romInfo`: the header is looked for where a LoROM, a HiROM and an ExHiROM game have it, behind a copier's 512 bytes or not, and weighed as Snes9x weighs it; a wrong checksum does not rule a file out). 8 MB and those 512 bytes at most a game, 96 MB and 1000 games in all, under a name with folders and odd characters taken out, ending in `.sfc` or `.smc`. They go to the app's `data/roms/` folder, which the service finds itself; a request cannot name a folder.
+- **A `.zip` is unpacked on the way** (since 0.2.0; `unzip.js`, the app's own file): the page takes a `.zip` of up to 9 MB, unpacks the files in it that are named `.sfc` or `.smc`, 20 at most, and saves each as the game it is, by the same rules as a game sent by itself. No zip is ever written to the head unit. A zip says how big each file in it is, and that is not believed: a file is given up on as soon as more comes out than it said, so one that unpacks to gigabytes costs a fraction of a second and no memory to speak of. A zip without a game, with a password, damaged, or of a kind that is not read is refused with the reason, on the phone and on the car's screen.
 - **It cannot restart the head unit by crashing.** No core file reaches the head unit's crash handler (`LimitCORE=1`), the Store lists the units with the head unit's recovery manager, and a service that keeps failing to start is left stopped.
 
 ## A USB gamepad
@@ -84,6 +85,7 @@ component.json   what the MGU Store installs: the files, the two units, the chec
 service.js       the service
 page.js          the page and its requests
 games.js         the app's games folder; what counts as a game; saving and removing one
+unzip.js         the games out of a .zip (the same file as the app's)
 nft.js           the firewall rules
 sockgroup.js     the socket for the SNES app alone
 pad.js           a USB gamepad: finding it, switching it on, what its packets mean

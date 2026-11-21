@@ -4,12 +4,16 @@
  *
  * Games come from these places, a later one's file winning over an earlier one's of the same name:
  *   games.pack         app/games/*.sfc: the free game that comes with the app (games/ has its source)
- *   roms.pack          app/roms/*.sfc and *.smc on the PC: your own, packed into the app by a build for your car
+ *   roms.pack          app/roms/*.sfc, *.smc and *.zip on the PC: your own, packed into the app by a build for your car
  *                      (kit/tools/pack_data.py); never in a package that is published
- *   <data>/roms/       .sfc and .smc files copied to the app's data folder on the head unit (and any folder
- *                      listed in app.json config.romDirs)
- *   a USB stick        .sfc and .smc files in a folder "snes" at the top of a stick that is plugged in
+ *   <data>/roms/       .sfc, .smc and .zip files copied to the app's data folder on the head unit (and any
+ *                      folder listed in app.json config.romDirs)
+ *   a USB stick        .sfc, .smc and .zip files in a folder "snes" at the top of a stick that is plugged in
  *                      (usbFolders; they are played from the stick, not copied)
+ *
+ * A .zip is a game as it comes out of most collections: one .sfc or .smc file, zipped. It is listed by its
+ * own name without being opened, and unpacked in memory when it is played (rom(); unzip.js): the first file in
+ * it that is named as a game is the game. Nothing is written for it.
  *
  * Kept per game in <data>/saves/: <game>.srm (the cartridge's battery memory) and <game>.state (where
  * the game stood when it was last left). A state is the emulator core's own: the one of another core (the
@@ -19,10 +23,13 @@
 const fs = require('fs');
 const path = require('path');
 const zlib = require('zlib');
+const unzip = require('./unzip');
 
 const MAGIC = 'MGUPACK1';
-const ROM_RE = /\.(sfc|smc)$/i;
+const ROM_RE = /\.(sfc|smc|zip)$/i;                 // what is listed
+const GAME_RE = /\.(sfc|smc)$/i, ZIP_RE = /\.zip$/i;
 const MAX_ROM = (8 << 20) + 512;                   // the biggest game taken, and a copier's header in front of it
+const MAX_ZIP = MAX_ROM + (1 << 20);               // the biggest .zip read: a game that did not shrink, and what else is in it
 
 function mkdirp(dir) {
     // (Node 8's mkdirSync has no { recursive })
@@ -131,17 +138,26 @@ class Library {
     }
     byId(id) { return this.games.find((g) => g.id === id) || null; }
 
-    /** the ROM file's bytes, or null */
+    /** the game's file as it is (a .zip still zipped), or null */
     read(g) {
+        const max = ZIP_RE.test(g.file) ? MAX_ZIP : MAX_ROM;
         try {
             if (g.dir) {
                 const f = path.join(g.dir, g.file);
-                if (fs.statSync(f).size > MAX_ROM) return null;
+                if (fs.statSync(f).size > max) { this.log.warn('snes: ' + g.file + ': bigger than ' + (max >> 20) + ' MB'); return null; }
                 return fs.readFileSync(f);
             }
             const b = g.pack && g.pack.read(g.file);
-            return b && b.length <= MAX_ROM ? b : null;
+            return b && b.length <= max ? b : null;
         } catch (e) { this.log.warn('snes: ' + g.file + ': ' + e.message); return null; }
+    }
+
+    /** A Promise of the game's ROM, out of its .zip when it is in one; null when there is none to be had. Never rejects. */
+    rom(g) {
+        const b = this.read(g);
+        if (!b || !ZIP_RE.test(g.file)) return Promise.resolve(b);
+        return unzip.games(b, { isGame: GAME_RE, max: MAX_ROM, most: 1 }).then((list) => list[0].data,
+            (e) => { this.log.warn('snes: ' + g.file + ': ' + (e.zip ? e.message : 'could not be unpacked (' + e.message + ')')); return null; });
     }
 
     /* ---------- what is kept per game ---------- */
@@ -177,4 +193,4 @@ class Library {
     }
 }
 
-module.exports = { Library, titleOf, mkdirp, openPack, usbFolders };
+module.exports = { Library, titleOf, mkdirp, openPack, usbFolders, MAX_ROM, MAX_ZIP };

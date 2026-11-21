@@ -24,7 +24,7 @@
  *         controller, a USB gamepad, and the four buttons on the touchscreen: a finger on the page itself
  *         does not reach an app that draws pixel pictures (kit renderd.js: claim).
  *
- * Games are .sfc and .smc files (library.js): one comes with the app (app/games/); your own are in
+ * Games are .sfc and .smc files, or a .zip with one in it (library.js): one comes with the app (app/games/); your own are in
  * <the app's data folder>/roms/ on the head unit (copied there, or sent from a phone), in a folder
  * "snes" on a USB stick, or packed into the app from app/roms/ by a build on a PC.
  *
@@ -165,7 +165,7 @@ mgu.run({
                 if (snes.name !== chip()) { snes.close(); game = null; frames = 0; snes = core(chip()); }
                 if (!snes.ready) { put('MENU_INFO', 'Starting the emulator...'); await snes.compile(); }
                 applyOptions();
-                const rom = lib.read(g), info = rom && romInfo(rom), t0 = mono();
+                const rom = await lib.rom(g), info = rom && romInfo(rom), t0 = mono();     // (out of its .zip, when it is in one)
                 if (!rom || !snes.load(rom)) {
                     game = null; frames = 0;
                     err = g.title + ': not a game this emulator can run';
@@ -206,7 +206,7 @@ mgu.run({
             let info;
             if (err) info = err;
             else if (driving()) info = 'Parked only - the game waits while you drive (Settings: Parked only)';
-            else if (!lib.games.length) info = 'No games: put .sfc and .smc files in a folder "snes" on a USB stick, or copy them to ' + romDir;
+            else if (!lib.games.length) info = 'No games: put .sfc, .smc or .zip files in a folder "snes" on a USB stick, or copy them to ' + romDir;
             else info = lib.games.length + (lib.games.length === 1 ? ' game' : ' games') + '. In a game, BACK returns here and saves';
             put('BTN_PLAY', cur ? 'Continue: ' + cur.title : 'Continue');
             shownRow('BTN_PLAY', !!cur);
@@ -524,7 +524,7 @@ mgu.run({
                 text('Scan with your phone', 560, 86, 44, C.text, { font: 'bold' });
                 lines([joined ? '1   The phone on the same Wi-Fi as the car (your home Wi-Fi, or the phone\'s own hotspot)'
                     : '1   The phone on the car\'s Wi-Fi (wireless CarPlay, or its hotspot)',
-                    '2   Scan the code with the camera and pick your .sfc and .smc files',
+                    '2   Scan the code with the camera and pick your games: .sfc, .smc or .zip files',
                     '3   The games you send are in the tab "Games"'], 560, 146, 28, C.dim, 44);
                 text(fits(page.url, 24, 900), 560, 290, 24, C.dim, { literal: true });
                 const recent = (page.saved || []).slice(-4);
@@ -547,7 +547,7 @@ mgu.run({
             } else if (s.step === 'missing') {
                 text('This needs the SNES game loader', 80, 130, 44, C.text, { font: 'bold' });
                 lines(['Install "SNES game loader" in the MGU Store, from the source this app came from,', 'and restart the head unit once.',
-                    '', 'Without it: put your .sfc and .smc files in a folder "snes" on a USB stick.'], 80, 200, 30, C.dim);
+                    '', 'Without it: put your .sfc, .smc or .zip files in a folder "snes" on a USB stick.'], 80, 200, 30, C.dim);
             } else if (s.step === 'refused') {
                 text('Restart the head unit once', 80, 150, 44, C.text, { font: 'bold' });
                 lines(['The SNES game loader was installed before this app and does not know it yet.', 'Settings in the MGU Store: Restart head unit.'], 80, 220, 30, C.dim);

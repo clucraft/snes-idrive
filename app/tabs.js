@@ -158,7 +158,7 @@ class Tabs {
         if (!rows.length) {
             if (name === 'games') {
                 text('No games yet', 40, top + 60, 40, C.text, { font: 'bold' });
-                text('Send your .sfc and .smc files from a phone: the tab "Add games".', 40, top + 116, 28, C.dim);
+                text('Send your .sfc, .smc or .zip files from a phone: the tab "Add games".', 40, top + 116, 28, C.dim);
                 text('Or put them in a folder "snes" on a USB stick.', 40, top + 158, 28, C.dim);
             }
             return;

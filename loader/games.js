@@ -15,6 +15,7 @@
  * So the folder's owner is not the app's user, and the app's user alone, without that group, does not get as
  * far as its own folder: whoever saves games as that user is started inside `data` (service.js does that).
  *
+ * What comes zipped is unpacked by the page first (page.js, unzip.js): what is saved is always the game itself.
  * A game is a file with an SNES cartridge's header in it (romInfo, which is the app's: app/snes-core.js has the
  * same function, and a test holds the two together), with a name made safe to create. Part of the SNES game
  * loader (snes-idrive, MIT). Runs on the head unit's Node 8.
@@ -30,6 +31,9 @@ const MAX_GAME = MAX_ROM + 512;     // and a copier's header in front of it: the
 const MAX_FOLDER = 96 << 20;        // all of them together: the app's share of the disk is 128 MB, and its saves are in it too
 const MAX_GAMES = 1000;
 const IS_GAME = /\.(sfc|smc)$/i;
+const IS_ZIP = /\.zip$/i;            // a game as most collections keep it: the page unpacks it, and saves what is in it
+const MAX_ZIP = MAX_GAME + (1 << 20); // the biggest .zip taken: a game that did not shrink, and what else is in it
+const IN_ZIP = 20;                  // games taken out of one .zip, at most
 const printable = (c) => (c >= 0x20 && c <= 0x7e) || (c >= 0xa1 && c <= 0xdf);   // ASCII, and the katakana of JIS X 0201
 
 /**
@@ -99,6 +103,11 @@ function safeName(raw) {
     if (!/[A-Za-z0-9]/.test(base)) return null;
     if (base.length > 76) base = base.slice(0, 76).replace(/[ .]+$/, '');
     return base + ext;
+}
+
+/** a name as it was sent, made fit to be shown and logged (the file is never created under it) */
+function shown(raw) {
+    return String(raw == null ? '' : raw).replace(/\\/g, '/').split('/').pop().replace(/[^A-Za-z0-9 ._()[\]!&'+,-]/g, '_').replace(/\s+/g, ' ').trim().slice(0, 80);
 }
 
 /** why `data` is no SNES game, or null when it is one */
@@ -177,4 +186,4 @@ function sweep(dir) {
     try { fs.readdirSync(dir).filter((n) => /^\..*\.part$/.test(n)).forEach((n) => { try { fs.unlinkSync(path.join(dir, n)); } catch (e) { /* gone */ } }); } catch (e) { /* no folder yet */ }
 }
 
-module.exports = { APP, OAP_DIR, GAMES, MAX_ROM, MAX_GAME, MAX_FOLDER, MAX_GAMES, IS_GAME, findApp, safeName, romInfo, refuse, list, unusable, save, remove, sweep };
+module.exports = { APP, OAP_DIR, GAMES, MAX_ROM, MAX_GAME, MAX_ZIP, IN_ZIP, MAX_FOLDER, MAX_GAMES, IS_GAME, IS_ZIP, findApp, safeName, shown, romInfo, refuse, list, unusable, save, remove, sweep };

@@ -37,7 +37,7 @@ if (given.indexOf('--no-phone') < 0) {
 if (!process.env.SNES_ROMS) {
     const dir = path.join(ROOT, 'roms');
     let has = false;
-    try { has = fs.readdirSync(dir).some((f) => /\.(sfc|smc)$/i.test(f)); } catch (e) { /* no such folder */ }
+    try { has = fs.readdirSync(dir).some((f) => /\.(sfc|smc|zip)$/i.test(f)); } catch (e) { /* no such folder */ }
     if (has) { process.env.SNES_ROMS = dir; console.log('emu: games from roms/ too'); }
 }
 const child = spawn(process.execPath, [path.join(KIT, 'kit', 'tools', 'emu.js'), APP_ID].concat(args), { cwd: KIT, stdio: 'inherit' });

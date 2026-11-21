@@ -1,10 +1,10 @@
 {
   "id": "clucraft-snes-loader",
   "kind": "tool",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "license": "MIT",
   "title": "SNES game loader",
-  "description": "For the app SNES: send your own .sfc and .smc games from a phone. \"Add games from a phone\" in the app shows a QR code; the phone, on the same Wi-Fi as the car (the home Wi-Fi or phone hotspot the car has joined; or the car's own, with wireless CarPlay or its hotspot), opens a page and picks the files. The page's port is open in the head unit's firewall only while that screen is up, and on a Wi-Fi the car has joined only while the app's setting for it is on; the page runs as the SNES app's own user and writes only into its games folder. Also reads a USB gamepad (an Xbox pad on a cable) for the app while a game or its list of games shows, when the app's setting \"USB gamepad\" is on, and plays a game's sound into the head unit's sound mixer while the game runs (the app asks the head unit for the speakers). Starts when the app asks, never at boot. Restart the head unit once after installing it.",
+  "description": "For the app SNES: send your own .sfc and .smc games from a phone, zipped or not (a .zip is unpacked on the way). \"Add games from a phone\" in the app shows a QR code; the phone, on the same Wi-Fi as the car (the home Wi-Fi or phone hotspot the car has joined; or the car's own, with wireless CarPlay or its hotspot), opens a page and picks the files. The page's port is open in the head unit's firewall only while that screen is up, and on a Wi-Fi the car has joined only while the app's setting for it is on; the page runs as the SNES app's own user and writes only into its games folder. Also reads a USB gamepad (an Xbox pad on a cable) for the app while a game or its list of games shows, when the app's setting \"USB gamepad\" is on, and plays a game's sound into the head unit's sound mixer while the game runs (the app asks the head unit for the speakers). Starts when the app asks, never at boot. Restart the head unit once after installing it.",
   "requires": {
     "mgu-deploy": "0.7.0"
   },
@@ -17,6 +17,7 @@
     { "path": "service.js", "from": "service.js", "mode": "0644" },
     { "path": "page.js", "from": "page.js", "mode": "0644" },
     { "path": "games.js", "from": "games.js", "mode": "0644" },
+    { "path": "unzip.js", "from": "unzip.js", "mode": "0644" },
     { "path": "nft.js", "from": "nft.js", "mode": "0644" },
     { "path": "sockgroup.js", "from": "sockgroup.js", "mode": "0644" },
     { "path": "pad.js", "from": "pad.js", "mode": "0644" },

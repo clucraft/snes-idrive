@@ -12,7 +12,7 @@
 
 *Pad Test in the app, as the head unit's 1920 x 720 screen would show it (the kit's emulator on a PC).*
 
-**It comes with one small free game, Pad Test,** written for it. Beyond that the app runs `.sfc` and `.smc` files you supply. This is an independent community project. It is not affiliated with or endorsed by BMW or Nintendo. All trademarks belong to their owners.
+**It comes with one small free game, Pad Test,** written for it. Beyond that the app runs `.sfc` and `.smc` files you supply, zipped or not. This is an independent community project. It is not affiliated with or endorsed by BMW or Nintendo. All trademarks belong to their owners.
 
 ---
 
@@ -21,11 +21,12 @@
 ### Games
 
 - **Pad Test comes with the app:** it shows every button of the pad, a clock, a ball and a beep, to see at a glance how the head unit does ([`games/`](games) has its source).
-- Your own `.sfc` and `.smc` files get to the app in four ways:
+- Your own `.sfc` and `.smc` files, **or a `.zip` with one in it**, get to the app in four ways:
   - **From a phone.** *Add games from a phone* in the menu shows a QR code. The phone, on the same Wi-Fi as the car, opens the page behind it and you pick the files. This needs the [SNES game loader](loader), a small service installed beside the app.
   - **A USB stick,** in a folder named `snes` at its top. They are played from the stick, not copied. *The NES app never showed whether the head unit lets an app read a stick; neither has this one.*
   - **`roms/` in the app's data folder on the head unit** (`/var/opt/public/oap/oap_<uid>/data/roms/`; the app's log names the folder at each start).
   - **`app/roms/` on your PC.** The build for the kit's installer packs the folder into the app. Git ignores them, and the package the MGU Store installs never has them.
+- **Zipped games** (since 0.2.0), as most collections keep them: a `.zip` on a USB stick or in the data folder is listed by its own name and unpacked in memory when it is played; nothing is written for it. A `.zip` sent from a phone is unpacked by the loader on the way, and what is saved is the game itself (every game in the zip, up to 20). The first file in a zip that is named `.sfc` or `.smc` is the game. Read: files stored or deflated, which is what zip programs write. Not read: a zip with a password, in several parts, or over 4 GB, and `.7z` or `.rar`. A zip is only as trusted as any file: one that says its game is small and unpacks to gigabytes is given up on as soon as more comes out than it said.
 - **What is a game file:** an SNES ROM has no signature at its start, so the app looks for the cartridge's header where a LoROM, a HiROM and an ExHiROM game have it, behind a copier's 512 bytes (`.smc`) or not, and weighs it as Snes9x does. A wrong checksum does not rule a file out: translations and hacks have them. Up to 8 MB a game.
 - **The core is snes9x2005** (Snes9x 1.43): the lightest of the Snes9x family and the least exact. It has the special chips (SuperFX, SA-1, DSP-1, DSP-2, DSP-4, C4, S-DD1, SPC7110, OBC1, S-RTC, Seta's); how well each game runs is not known here. One player.
 
@@ -119,9 +120,10 @@ Nearly all of it is the NES app with its names changed. What an SNES changes is 
 
 **All of this ran on a PC, on 2026-11-20. No head unit has run any of it.**
 
-- **The tests** (`npm test`): 71 pass on Node 8.17 on Linux (WSL) as root, 70 as a user (one needs root), and 63 on Windows on Node 8.17 and on Node 24 (what needs Linux is skipped there). They cover the game-file check; both cores on a cartridge the test makes itself (picture, pad, save states, battery memory, frames not drawn, high resolution, the memory never growing); the controller and the tabs; the gamepad from its USB packets to the app, with a stand-in for the program that reads it; the games and saves on disk; Pad Test played in the core, every button, its clock, its beep; games from a phone through the loader with a stand-in for the firewall; the sound through the loader, and the real player resampling from 32040 samples a second; and the Store's package being this `app/`, with both licences in it and no game but Pad Test.
+- **The tests** (`npm test`): 76 pass on Node 8.17 on Linux (WSL) as root, 75 as a user (one needs root), and 68 on Windows on Node 8.17 and on Node 24 (what needs Linux is skipped there). They cover the game-file check; both cores on a cartridge the test makes itself (picture, pad, save states, battery memory, frames not drawn, high resolution, the memory never growing); the controller and the tabs; the gamepad from its USB packets to the app, with a stand-in for the program that reads it; the games and saves on disk; zipped games, from the zip's bytes to the core, and zips that are damaged or lie about their size; Pad Test played in the core, every button, its clock, its beep; games from a phone through the loader with a stand-in for the firewall; the sound through the loader, and the real player resampling from 32040 samples a second; and the Store's package being this `app/`, with both licences in it and no game but Pad Test.
 - **The cores** match native builds of the same sources frame for frame, picture and sound ([`core/README.md`](core/README.md)).
 - **The app in the kit's emulator:** the menu, the three tabs, a game from the list, Pad Test with the keyboard as the iDrive controller (push, press, a click each way counted as they should), a 512 x 448 picture, a game sent to the loader's page over HTTP arriving in the list and a file that is no game refused with its reason on the screen. No gamepad was plugged in.
+- **Zipped games** (2026-11-21): the reader read back one game from zips made by Python's zipfile (deflated, stored, with folders and a comment, written without seeking), PowerShell's Compress-Archive and Windows' tar, on Node 8.17 and Node 24. A zipped game was played in the app in the kit's emulator. A 6 MB game unpacks and is checked in about 50 ms on this PC. No zip from a real collection has been tried.
 - **Sound:** not heard by anyone yet. Measured: Pad Test's beeps through the loader's real player come out 1.000 s apart at 994 Hz (the quick sound chip) and 1002 Hz (the truer one). `node tools/sound-try.js` leaves a `.wav` to listen to.
 - **Speed on this PC** (a Ryzen 7 9800X3D, Node 8.17): 0.16 to 0.52 ms a frame for scenes without a special chip, 1.3 ms for a SuperFX demo; the NES app's core, 0.26 ms. Free test ROMs only: no commercial game has been measured.
 - **A save:** making a state (529 KB) and writing it took 0.6 to 1.1 ms on this PC. The app does that every 30 seconds while a game runs, as the NES app does, and writes into its log what it took.
@@ -143,10 +145,10 @@ ssh -i <id_rsa> root@<address> "grep -e 'snes:' -e 'gamepad:' -e 'sound:' /var/o
 2. **Pad Test with the iDrive controller.** Its clock against a watch for a minute; the ball crossing evenly; the four corner marks on the screen; one press counts one B, one click right one A, one click left one Start. Then the log: `snes: 600 frames in 10.0 s, ... ms a frame (worst ...), drawn ..., not drawn ..., skipped ..., late ...; a call ... ms, with a picture ... ms`. **These are the numbers:** a frame of the emulator alone, and a whole call with the picture handed over. A call under 8 ms and nothing skipped: the head unit has room. "Every second one from now" in the log: it does not, for that game.
 3. **Install *SNES game loader***, restart the head unit once. Plug in the Xbox pad. In Pad Test every button lights its own light: the pad's A lights B (by position). Both sticks pressed in, or the Xbox button, go back to the list.
 4. **Sound, still in Pad Test:** a beep as each second begins. Is it there? Does it come with the digit, or after it, and by how much? Hold a button: how soon is the hum? Leave the game: what does the head unit play then?
-5. **A game of your own from the phone** (*Add games*), an ordinary one first. Does it play at full speed with sound? The log's line for it.
+5. **A game of your own from the phone** (*Add games*), an ordinary one first, as it comes out of your collection: a `.zip` is fine. Does it play at full speed with sound? The log's line for it.
 6. **The setting *Sound chip* on "the truer one"**, the same game again: hear the difference, and read the difference in the log's milliseconds.
 7. **A heavy game:** one with a SuperFX or SA-1 chip, and one that uses high resolution if you have one. The log says how far over the time they are, and whether drawing every second frame was enough.
-8. **A USB stick** with a folder `snes`: the log's line `snes: USB sticks: ...` says whether the head unit lets an app look.
+8. **A USB stick** with a folder `snes`, zipped games in it as they are: the log's line `snes: USB sticks: ...` says whether the head unit lets an app look.
 
 ## Try it in the emulator
 
@@ -164,7 +166,7 @@ cd snes-idrive
 npm run emu
 ```
 
-Then open http://localhost:8077. *Pad Test* is there at once; for your own games, copy `.sfc` or `.smc` files into `app/roms/` (or into `roms/` at the top, which the emulator reads without a rebuild).
+Then open http://localhost:8077. *Pad Test* is there at once; for your own games, copy `.sfc`, `.smc` or `.zip` files into `app/roms/` (or into `roms/` at the top, which the emulator reads without a rebuild).
 
 - **Starting a game:** the main menu's rows are the buttons in the side panel. *Games* opens the games screen, which is drawn; the keys below steer it.
 - **Controls:** the arrow keys push the iDrive controller, `Enter` presses it, the mouse wheel and `[` `]` turn it, `Backspace` is BACK. A click on a drawn button is a tap.
@@ -194,7 +196,7 @@ It installs beside the NES app and its loader: every name is its own (`clucraft_
 
 With the kit's installer instead: BMW's SDK from your own head unit in `vendor/idrive7-apps/oap-sdk`, then `npm run build:car`; the [NES project's README](https://github.com/clucraft/nes-idrive#with-the-kits-installer) has the steps, which are the same. The loader installs through the Store only.
 
-**What the app declares to the head unit** (the kit's defaults but for the disk): 128 MB of disk for its games and saves, a memory threshold of 192 MB, a CPU limit of 60. What the head unit does at those limits is not known. The loader lets the phone's folder hold 96 MB, a game 8 MB.
+**What the app declares to the head unit** (the kit's defaults but for the disk): 128 MB of disk for its games and saves, a memory threshold of 192 MB, a CPU limit of 60. What the head unit does at those limits is not known. The loader lets the phone's folder hold 96 MB, a game 8 MB, a `.zip` 9 MB.
 
 ### Publishing a new version to the Store
 
@@ -219,7 +221,7 @@ The loader is installed as it is in `loader/`. A change to what it installs need
 ## Repository layout
 
 ```
-app/                  the head-unit app: app.json, main.js, snes-core.js, controls.js, library.js, tabs.js,
+app/                  the head-unit app: app.json, main.js, snes-core.js, controls.js, library.js, unzip.js, tabs.js,
                       phone.js and qr.js (Add games from a phone), pad.js (a USB gamepad), sound.js and
                       caraudio.js, snes.wasm and snes-plus.wasm (the emulator, built by core/build.js),
                       games/ (the game that comes with it), roms/ (your games), LICENSE and NOTICE

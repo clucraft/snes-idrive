@@ -3,7 +3,7 @@
 // SNES app: what counts as a game file (snes-core.js, romInfo), the emulator (app/snes.wasm and app/snes-plus.wasm
 // through snes-core.js) on a small cartridge made here, the controller -> pad mapping (controls.js), the tabs of
 // the game's screen (tabs.js: the list of games, the settings, and what steers them), the games / saves on disk
-// (library.js) and the game that comes with the app (app/games/), played in the emulator. "Add games from a
+// (library.js), games that come zipped (unzip.js), and the game that comes with the app (app/games/), played in the emulator. "Add games from a
 // phone": the QR code (qr.js) and the SNES game loader (loader/) from the app's request to a game sent over
 // HTTP, with a stand-in for the head unit's firewall program. A USB gamepad: what its packets mean
 // (loader/pad.js), and its buttons from a stand-in for the program that reads it (test/fake-usbpipe.js) through
@@ -754,6 +754,159 @@ function writePack(file, files) {
         assert(!fs.readdirSync(path.join(tmp, 'saves')).some((f) => /\.tmp$/.test(f)), 'a temporary file was left');
     });
 
+    /* ---------- games that come zipped (unzip.js): in the app's list, and through the loader's page ---------- */
+    const unzip = require(path.join(ROOT, 'app/unzip'));
+    /**
+     * A .zip of these files, as zip programs write one: [{ name, data, store: true (not deflated), says: a size to
+     * claim in place of the true one, crc, flags, method, packed: the bytes to put in place of the packed ones }]
+     */
+    const zipOf = (files, comment) => {
+        const locals = [], centrals = [];
+        let at = 0;
+        files.forEach((f) => {
+            const name = Buffer.from(f.name, 'utf8'), packed = f.packed || (f.store ? f.data : zlib.deflateRawSync(f.data));
+            const method = f.method !== undefined ? f.method : f.store ? 0 : 8, size = f.says !== undefined ? f.says : f.data.length;
+            const crc = f.crc !== undefined ? f.crc : unzip.crc32(f.data), flags = (f.flags || 0) | 0x800;
+            const local = Buffer.alloc(30);
+            local.writeUInt32LE(0x04034b50, 0); local.writeUInt16LE(20, 4); local.writeUInt16LE(flags, 6); local.writeUInt16LE(method, 8);
+            local.writeUInt32LE(crc, 14); local.writeUInt32LE(packed.length, 18); local.writeUInt32LE(size, 22); local.writeUInt16LE(name.length, 26);
+            const central = Buffer.alloc(46);
+            central.writeUInt32LE(0x02014b50, 0); central.writeUInt16LE(20, 4); central.writeUInt16LE(20, 6); central.writeUInt16LE(flags, 8); central.writeUInt16LE(method, 10);
+            central.writeUInt32LE(crc, 16); central.writeUInt32LE(packed.length, 20); central.writeUInt32LE(size, 24); central.writeUInt16LE(name.length, 28); central.writeUInt32LE(at, 42);
+            locals.push(local, name, packed);
+            centrals.push(central, name);
+            at += 30 + name.length + packed.length;
+        });
+        const dir = Buffer.concat(centrals), note = Buffer.from(comment || ''), end = Buffer.alloc(22);
+        end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(files.length, 8); end.writeUInt16LE(files.length, 10); end.writeUInt32LE(dir.length, 12); end.writeUInt32LE(at, 16); end.writeUInt16LE(note.length, 20);
+        return Buffer.concat(locals.concat([dir, end, note]));
+    };
+    const IS_GAME = /\.(sfc|smc)$/i, MOST = { isGame: IS_GAME, max: MAX_ROM + 512, most: 20 };
+    const failsAs = (promise, re, what) => promise.then(() => { throw new Error(what + ': unpacked'); }, (e) => { assert(e.zip === true && re.test(e.message), what + ': ' + e.message); });
+    await check('zip: a game stored and a game deflated come out as they went in; folders, hidden files and what is no game by its name are passed over', async () => {
+        const smc = Buffer.concat([Buffer.alloc(512), rom]);
+        const z = zipOf([{ name: 'readme.txt', data: Buffer.from('not a game') }, { name: 'games/', data: Buffer.alloc(0), store: true }, { name: '__MACOSX/games/._One Game (USA).sfc', data: Buffer.from('a resource fork') },
+            { name: 'games/.hidden.sfc', data: rom }, { name: 'games/One Game (USA).sfc', data: rom }, { name: 'games/Two Game.SMC', data: smc, store: true }, { name: 'Spätes Spiel.sfc', data: rom }], 'a comment at the end');
+        assert(unzip.isZip(z) && !unzip.isZip(rom) && !unzip.isZip(Buffer.alloc(0)) && !unzip.isZip(null));
+        assert.deepStrictEqual(unzip.entries(z).map((e) => e.name), ['readme.txt', 'games/', '__MACOSX/games/._One Game (USA).sfc', 'games/.hidden.sfc', 'games/One Game (USA).sfc', 'games/Two Game.SMC', 'Spätes Spiel.sfc']);
+        const all = await unzip.games(z, MOST);
+        assert.deepStrictEqual(all.map((g) => g.name), ['games/One Game (USA).sfc', 'games/Two Game.SMC', 'Spätes Spiel.sfc']);
+        assert(all[0].data.equals(rom) && all[1].data.equals(smc) && all[2].data.equals(rom), 'not the bytes that went in');
+        const one = await unzip.games(z, { isGame: IS_GAME, max: MAX_ROM + 512, most: 1 });
+        assert(one.length === 1 && one[0].data.equals(rom), 'the first game in it');
+        // a game of the biggest size, which packs to little
+        const big = Buffer.alloc(MAX_ROM, 0x5a);
+        rom.copy(big, 0);
+        assert((await unzip.games(zipOf([{ name: 'Big.sfc', data: big }]), MOST))[0].data.equals(big), 'an 8 MB game');
+    });
+    await check('zip: one that lies about its size, is damaged, too big, has a password, is of a kind not read, or is no zip is refused, and says why', async () => {
+        const heavy = Buffer.alloc(40 << 20);            // 40 MB that pack to 40 KB
+        const packed = zlib.deflateRawSync(heavy);
+        assert(packed.length < 100000, 'the test\'s own bomb is ' + packed.length + ' bytes');
+        const before = process.memoryUsage().rss;
+        await failsAs(unzip.games(zipOf([{ name: 'Liar.sfc', data: rom, packed, says: rom.length }]), MOST), /more in it than it says/, 'a zip that holds 40 MB and says 128 KB');
+        await failsAs(unzip.games(zipOf([{ name: 'Liar.sfc', data: rom, packed, says: 1000 }]), MOST), /more in it than it says/, 'the same saying 1000 bytes');
+        assert(process.memoryUsage().rss - before < (30 << 20), 'a lying zip made the program hold ' + ((process.memoryUsage().rss - before) >> 20) + ' MB more');
+        await failsAs(unzip.games(zipOf([{ name: 'Huge.sfc', data: rom, says: MAX_ROM + 513 }]), MOST), /bigger than 8 MB/, 'a game said to be over 8 MB');
+        await failsAs(unzip.games(zipOf([{ name: 'Short.sfc', data: rom, says: rom.length + 1 }]), MOST), /damaged/, 'less in it than it says');
+        await failsAs(unzip.games(zipOf([{ name: 'Sum.sfc', data: rom, crc: 12345 }]), MOST), /damaged/, 'a wrong checksum');
+        await failsAs(unzip.games(zipOf([{ name: 'Noise.sfc', data: rom, packed: Buffer.alloc(3000, 0xff) }]), MOST), /damaged/, 'bytes that are no packed data');
+        await failsAs(unzip.games(zipOf([{ name: 'Locked.sfc', data: rom, flags: 1 }]), MOST), /password/, 'a password');
+        await failsAs(unzip.games(zipOf([{ name: 'Odd.sfc', data: rom, method: 14 }]), MOST), /not read here/, 'another way of packing');
+        await failsAs(unzip.games(zipOf([{ name: 'readme.txt', data: rom }]), MOST), /no game in the zip/, 'no game in it');
+        await failsAs(unzip.games(zipOf([]), MOST), /no game in the zip/, 'an empty zip');
+        const good = zipOf([{ name: 'Good.sfc', data: rom }]);
+        await failsAs(unzip.games(good.slice(0, good.length - 30), MOST), /damaged|no end/, 'a zip cut short');
+        await failsAs(unzip.games(Buffer.concat([good.slice(0, 40), good.slice(400)]), MOST), /damaged/, 'a zip with a piece missing');
+        const far = Buffer.from(good); far.writeUInt32LE(0xfffffff0, far.length - 22 + 16);
+        await failsAs(unzip.games(far, MOST), /damaged/, 'a list of files said to be beyond the end');
+        const many = Buffer.from(good); many.writeUInt16LE(0xffff, many.length - 22 + 8); many.writeUInt16LE(0xffff, many.length - 22 + 10);
+        await failsAs(unzip.games(many, MOST), /too big/, 'a zip of the kind for more than 65535 files');
+        await failsAs(unzip.games(rom, MOST), /not a zip/, 'a game that is not zipped');
+        await failsAs(unzip.games(Buffer.from('PK\u0003\u0004 and then nothing of a zip at all, just some text'), MOST), /damaged|no end/, 'four right bytes and text');
+        // a damaged game among good ones costs that one alone
+        const mixed = await unzip.games(zipOf([{ name: 'Bad.sfc', data: rom, crc: 1 }, { name: 'Fine.sfc', data: rom }]), MOST);
+        assert.deepStrictEqual(mixed.map((g) => g.name), ['Fine.sfc']);
+    });
+    await check('zip: the loader, which is installed by itself, has the app\'s unzip.js, to the letter', () => {
+        assert(fs.readFileSync(path.join(ROOT, 'loader/unzip.js')).equals(fs.readFileSync(path.join(ROOT, 'app/unzip.js'))), 'loader/unzip.js is not app/unzip.js');
+    });
+    await check('library: a .zip is listed by its name, and played as the game in it; one without a game is no game', async () => {
+        const dir = path.join(tmp, 'zipped');
+        fs.mkdirSync(dir);
+        fs.writeFileSync(path.join(dir, 'Zipped Game (USA) (Rev 1).zip'), zipOf([{ name: 'Zipped Game (USA) (Rev 1).sfc', data: rom }]));
+        fs.writeFileSync(path.join(dir, 'Copier Game.ZIP'), zipOf([{ name: 'notes.txt', data: Buffer.from('x') }, { name: 'Copier Game.smc', data: Buffer.concat([Buffer.alloc(512), rom]), store: true }]));
+        fs.writeFileSync(path.join(dir, 'Holiday Photos.zip'), zipOf([{ name: 'beach.jpg', data: Buffer.alloc(5000, 9) }]));
+        fs.writeFileSync(path.join(dir, 'Plain Game.sfc'), rom);
+        writePack(path.join(tmp, 'zipped.pack'), { 'Packed Game.zip': zipOf([{ name: 'inside.sfc', data: rom }]) });
+        const said = [], lib = new Library({ packs: [path.join(tmp, 'zipped.pack')], dirs: [dir], dataDir: tmp, log: { info() {}, warn(s) { said.push(s); }, error() {} } });
+        assert.deepStrictEqual(lib.scan().map((g) => g.title), ['Copier Game', 'Holiday Photos', 'Packed Game', 'Plain Game', 'Zipped Game']);
+        const by = (title) => lib.games.find((g) => g.title === title);
+        assert((await lib.rom(by('Zipped Game'))).equals(rom) && (await lib.rom(by('Packed Game'))).equals(rom) && (await lib.rom(by('Plain Game'))).equals(rom), 'not the game');
+        const smc = await lib.rom(by('Copier Game'));
+        assert(smc.length === rom.length + 512 && isRom(smc), 'the copier\'s header came along, and the core leaves it out');
+        assert.strictEqual(await lib.rom(by('Holiday Photos')), null, 'a zip without a game gave one');
+        assert(said.some((s) => /Holiday Photos\.zip: no game in the zip/.test(s)), 'the log does not say why: ' + said.join(' | '));
+        // as the app plays it: out of the zip, into the core
+        const zipped = new Snes({ wasm: WASM, log });
+        zipped.mod = snes.mod;
+        assert(zipped.load(await lib.rom(by('Zipped Game'))) && zipped.load(smc), 'the core did not take a game out of a zip');
+        const seen = colour(frames(zipped, 30));
+        assert(seen && seen[2] > 200 && seen[0] < 40, 'the game out of the zip does not show its picture: ' + seen);
+        // a save belongs to the game under its own name, zipped or not
+        assert(lib.setSram(by('Zipped Game'), Buffer.from('zipped')) && lib.sram(by('Plain Game')) === null && String(lib.sram(by('Zipped Game'))) === 'zipped');
+        // too big a zip is not read
+        fs.writeFileSync(path.join(dir, 'Too Big.zip'), Buffer.alloc(require(path.join(ROOT, 'app/library')).MAX_ZIP + 1));
+        lib.scan();
+        assert.strictEqual(await lib.rom(by('Too Big')), null);
+    });
+    await check('loader: a .zip sent to the page is unpacked on the way: the games in it are saved as the games they are, and a zip without one, or one that lies, is refused with the reason', async () => {
+        const dir = path.join(tmp, 'page-zips'), told = [];
+        const page = loader.page.createPage({ token: 'tokentokentokentoken', port: 0, dir, tell: (m) => told.push(m) });
+        const server = http.createServer((req, res) => page.handle(req, res));
+        await new Promise((done) => server.listen(0, '127.0.0.1', done));
+        const post = (name, body) => new Promise((resolve, reject) => {
+            const req = http.request({ host: '127.0.0.1', port: server.address().port, method: 'POST', path: '/tokentokentokentoken/games?name=' + encodeURIComponent(name), headers: { 'Content-Length': body.length } }, (res) => {
+                let text = '';
+                res.on('data', (d) => { text += d; });
+                res.on('end', () => { try { resolve({ status: res.statusCode, body: JSON.parse(text) }); } catch (e) { reject(e); } });
+            });
+            req.on('error', reject);
+            req.end(body);
+        });
+        try {
+            let r = await post('Zipped Game (USA).zip', zipOf([{ name: 'Zipped Game (USA).sfc', data: rom }]));
+            assert.deepStrictEqual([r.status, r.body], [200, { ok: true, name: 'Zipped Game (USA).sfc', size: rom.length, replaced: false, more: [] }]);
+            assert(fs.readFileSync(path.join(dir, 'Zipped Game (USA).sfc')).equals(rom), 'what is in the folder is not the game');
+            // a collection in one zip: every game in it, under its own name, folders and odd characters taken out
+            const smc = Buffer.concat([Buffer.alloc(512), rom]);
+            r = await post('../My Games.ZIP', zipOf([{ name: 'snes/First: Game.sfc', data: rom }, { name: 'snes/readme.txt', data: Buffer.from('x') }, { name: 'snes/Second Game.SMC', data: smc, store: true }, { name: 'snes/Not A Game.sfc', data: Buffer.alloc(40000, 7) }]));
+            assert.deepStrictEqual([r.status, r.body], [200, { ok: true, name: 'First_ Game.sfc', size: rom.length, replaced: false, more: ['Second Game.smc'] }]);
+            assert.deepStrictEqual(fs.readdirSync(dir).sort(), ['First_ Game.sfc', 'Second Game.smc', 'Zipped Game (USA).sfc'], 'the games folder');
+            assert(fs.readFileSync(path.join(dir, 'Second Game.smc')).equals(smc));
+            // the same game again replaces it
+            r = await post('again.zip', zipOf([{ name: 'ZIPPED GAME (USA).SFC', data: rom }]));
+            assert(r.status === 200 && r.body.replaced === true && r.body.name === 'ZIPPED GAME (USA).sfc', JSON.stringify(r.body));
+            // what is refused, and why
+            r = await post('Holiday Photos.zip', zipOf([{ name: 'beach.jpg', data: Buffer.alloc(5000, 9) }]));
+            assert.deepStrictEqual([r.status, r.body], [400, { ok: false, error: 'no .sfc or .smc file in the zip' }]);
+            r = await post('Only Junk.zip', zipOf([{ name: 'Junk.sfc', data: Buffer.alloc(40000, 7) }]));
+            assert(r.status === 400 && /not an SNES game/.test(r.body.error), JSON.stringify(r.body));
+            r = await post('Liar.zip', zipOf([{ name: 'Liar.sfc', data: rom, packed: zlib.deflateRawSync(Buffer.alloc(30 << 20)), says: 4000 }]));
+            assert(r.status === 400 && /more in it than it says/.test(r.body.error), JSON.stringify(r.body));
+            r = await post('Not Really.zip', rom);
+            assert(r.status === 400 && /not a zip/.test(r.body.error), JSON.stringify(r.body));
+            r = await post('archive.7z', rom);
+            assert(r.status === 400 && /not a \.sfc, \.smc or \.zip file/.test(r.body.error), JSON.stringify(r.body));
+            r = await post('Huge.zip', Buffer.alloc(loader.games.MAX_ZIP + 1)).catch((e) => ({ status: 413, body: {} }));
+            assert.strictEqual(r.status, 413, 'a zip bigger than is read is cut off');
+            assert.deepStrictEqual(fs.readdirSync(dir).sort(), ['First_ Game.sfc', 'Second Game.smc', 'ZIPPED GAME (USA).sfc'], 'the games folder after what was refused');
+            // the app is told each game, and each refusal, for its screen
+            assert.deepStrictEqual(told.filter((m) => m.event === 'saved').map((m) => m.name), ['Zipped Game (USA).sfc', 'First_ Game.sfc', 'Second Game.smc', 'ZIPPED GAME (USA).sfc']);
+            assert(told.some((m) => m.event === 'refused' && m.name === 'Holiday Photos.zip' && /no \.sfc or \.smc file/.test(m.why)) && told.some((m) => m.event === 'refused' && m.name === 'Not A Game.sfc'), JSON.stringify(told.filter((m) => m.event === 'refused')));
+        } finally { server.close(); }
+    });
+
     /* ---------- the game that comes with the app (app/games/, built from games/ by games/build.js) ---------- */
     const gamesDir = path.join(ROOT, 'app/games');
     const bundled = (name) => fs.readFileSync(path.join(gamesDir, name));
@@ -1462,7 +1615,7 @@ function writePack(file, files) {
     });
     await check('store: the package holds this app/ (else: npm run build:store)', () => {
         const inPkg = (n) => { const m = members.find((x) => x.name === 'package/javascript/' + n); assert(m, n + ' is not in the package'); return m.data; };
-        [['app.js', 'main.js'], ['controls.js'], ['library.js'], ['snes-core.js'], ['phone.js'], ['pad.js'], ['qr.js'], ['tabs.js'], ['sound.js'], ['caraudio.js'], ['snes.wasm'], ['snes-plus.wasm'], ['LICENSE'], ['NOTICE']].forEach((q) => {
+        [['app.js', 'main.js'], ['controls.js'], ['library.js'], ['unzip.js'], ['snes-core.js'], ['phone.js'], ['pad.js'], ['qr.js'], ['tabs.js'], ['sound.js'], ['caraudio.js'], ['snes.wasm'], ['snes-plus.wasm'], ['LICENSE'], ['NOTICE']].forEach((q) => {
             assert(inPkg(q[0]).equals(fs.readFileSync(path.join(ROOT, 'app', q[1] || q[0]))), 'app/' + (q[1] || q[0]) + ' changed since the package was built');
         });
         // the game in it: the app's own, as it is in app/games/

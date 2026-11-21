@@ -27,6 +27,7 @@ const http = require('http');
 const crypto = require('crypto');
 const querystring = require('querystring');
 const games = require('./games');
+const unzip = require('./unzip');
 
 const STRANGERS = 100;              // requests without the token before the page is closed
 
@@ -52,7 +53,7 @@ const HTML = `<!doctype html>
 </head>
 <body>
 <h1>SNES games for the car</h1>
-<p>Pick .sfc and .smc files on this phone. They go straight to the SNES app.</p>
+<p>Pick .sfc, .smc or .zip files on this phone. They go straight to the SNES app; a zipped game is unpacked on the way.</p>
 <label class="pick">Choose games<input id="files" type="file" multiple></label>
 <ul id="sent"></ul>
 <h2>In the car</h2>
@@ -103,7 +104,7 @@ const HTML = `<!doctype html>
     x.onload = function () {
       var a = answer(x);
       li.className = a.ok ? 'ok' : 'bad';
-      li.textContent = a.ok ? a.name + ' is in the car' + (a.replaced ? ' (replaced)' : '') : f.name + ': ' + (a.error || 'not taken');
+      li.textContent = a.ok ? a.name + ' is in the car' + (a.replaced ? ' (replaced)' : '') + (a.more && a.more.length ? ', and ' + a.more.length + ' more from the zip' : '') : f.name + ': ' + (a.error || 'not taken');
       send(files, i + 1);
     };
     x.onerror = function () { li.className = 'bad'; li.textContent = f.name + ': the car did not answer'; gone(); };
@@ -153,30 +154,52 @@ function createPage(opts) {
         return rest === '' || rest[0] === '/' ? rest : null;
     }
 
+    /** a game into the folder: { saved } or { why, code } (said on the car's screen too) */
+    function keep(name, data) {
+        try {
+            const saved = games.save(opts.dir, name, data);
+            tell(Object.assign({ event: 'saved' }, saved));
+            return { saved };
+        } catch (e) {
+            const why = e.refused ? e.message : 'the car could not save it (' + (e.code || 'error') + ')';
+            if (!e.refused) console.error('snes loader page: saving ' + games.shown(name) + ': ' + e.message);
+            tell({ event: 'refused', name: games.safeName(name) || games.shown(name), why });
+            return { why, code: e.refused ? 400 : 500 };
+        }
+    }
+
     function receive(req, res, name) {
-        if (!games.safeName(name)) { tell({ event: 'refused', name: String(name || '').slice(0, 80), why: 'not a .sfc or .smc file' }); return json(res, 400, { ok: false, error: 'not a .sfc or .smc file' }); }
-        if (Number(req.headers['content-length']) > games.MAX_GAME) { tell({ event: 'refused', name: games.safeName(name), why: 'too big' }); return json(res, 413, { ok: false, error: 'bigger than ' + (games.MAX_GAME >> 20) + ' MB' }); }
+        // a game, or a .zip with games in it: those are unpacked here and saved as the games they are
+        const zip = games.IS_ZIP.test(String(name || '')), max = zip ? games.MAX_ZIP : games.MAX_GAME;
+        if (!zip && !games.safeName(name)) { tell({ event: 'refused', name: games.shown(name), why: 'not a .sfc, .smc or .zip file' }); return json(res, 400, { ok: false, error: 'not a .sfc, .smc or .zip file' }); }
+        if (Number(req.headers['content-length']) > max) { tell({ event: 'refused', name: games.shown(name), why: 'too big' }); return json(res, 413, { ok: false, error: 'bigger than ' + (max >> 20) + ' MB' }); }
         const parts = [];
         let size = 0, over = false;
         req.on('data', (d) => {
             if (over) return;
             size += d.length;
-            if (size > games.MAX_GAME) { over = true; parts.length = 0; json(res, 413, { ok: false, error: 'bigger than ' + (games.MAX_GAME >> 20) + ' MB' }); req.destroy(); return; }
+            if (size > max) { over = true; parts.length = 0; json(res, 413, { ok: false, error: 'bigger than ' + (max >> 20) + ' MB' }); req.destroy(); return; }
             parts.push(d);
         });
         req.on('error', () => { over = true; });
         req.on('end', () => {
             if (over) return;
-            try {
-                const saved = games.save(opts.dir, name, Buffer.concat(parts, size));
-                tell(Object.assign({ event: 'saved' }, saved));
-                json(res, 200, Object.assign({ ok: true }, saved));
-            } catch (e) {
-                const why = e.refused ? e.message : 'the car could not save it (' + (e.code || 'error') + ')';
-                if (!e.refused) console.error('snes loader page: saving ' + games.safeName(name) + ': ' + e.message);
-                tell({ event: 'refused', name: games.safeName(name), why });          // (on the car's screen too)
-                json(res, e.refused ? 400 : 500, { ok: false, error: why });
+            const body = Buffer.concat(parts, size);
+            if (!zip) {
+                const r = keep(name, body);
+                return r.saved ? json(res, 200, Object.assign({ ok: true }, r.saved)) : json(res, r.code, { ok: false, error: r.why });
             }
+            unzip.games(body, { isGame: games.IS_GAME, max: games.MAX_GAME, most: games.IN_ZIP }).then((list) => {
+                const done = list.map((g) => keep(g.name, g.data)), saved = done.filter((r) => r.saved).map((r) => r.saved), failed = done.filter((r) => !r.saved);
+                if (!saved.length) return json(res, failed[0].code, { ok: false, error: failed[0].why });
+                json(res, 200, Object.assign({ ok: true }, saved[0], { more: saved.slice(1).map((s) => s.name) }));
+            }).catch((e) => {
+                // (the zip's own fault is said as it is; anything else must not end the page)
+                const why = e && e.zip ? (e.message === 'no game in the zip' ? 'no .sfc or .smc file in the zip' : e.message) : 'the zip could not be unpacked';
+                if (!(e && e.zip)) console.error('snes loader page: unpacking ' + games.shown(name) + ': ' + (e && e.message));
+                tell({ event: 'refused', name: games.shown(name), why });
+                json(res, 400, { ok: false, error: why });
+            });
         });
     }
 
